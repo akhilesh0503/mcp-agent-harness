@@ -1,0 +1,33 @@
+tools:
+  postgres_query:
+    risk_level: read_only
+    allowed: true
+    description: "Execute read-only SQL queries against PostgreSQL"
+
+  http_api_call:
+    risk_level: network
+    allowed: true
+    description: "Make HTTP GET/POST requests to external APIs"
+
+  file_read:
+    risk_level: read_only
+    allowed: true
+    description: "Read file contents from the allowed base directory"
+
+risk_levels:
+  read_only:
+    requires_approval: false
+    audit: true
+    cache_results: true
+    cache_ttl_seconds: 60
+
+  network:
+    requires_approval: false
+    audit: true
+    cache_results: false
+
+  destructive:
+    requires_approval: true
+    audit: true
+    cache_results: false
+    approval_timeout_seconds: 30
