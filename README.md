@@ -44,7 +44,7 @@ User Request
 
 - [x] **Phase 1** — Infrastructure (docker-compose, .env, init.sql, Prometheus, Grafana, policy.yaml)
 - [x] **Phase 2** — MCP Server + 3 tools
-- [ ] **Phase 3** — Config + Pydantic models
+- [x] **Phase 3** — Config + Pydantic models
 - [ ] **Phase 4** — Harness layers (SecurityGuard → AuditLogger)
 - [ ] **Phase 5** — LLM abstraction + Ollama client
 - [ ] **Phase 6** — Pipeline orchestrator + FastAPI agentic loop

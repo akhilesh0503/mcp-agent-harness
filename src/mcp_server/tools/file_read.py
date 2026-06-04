@@ -2,7 +2,9 @@ import asyncio
 import json
 import os
 
-_BASE_DIR = os.getenv("FILE_READ_BASE_DIR", "/tmp/agent_files")
+from src.config import settings
+
+_BASE_DIR = settings.file_read_base_dir
 _MAX_BYTES = 1 * 1024 * 1024  # 1 MB cap
 
 

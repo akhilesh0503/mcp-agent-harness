@@ -6,6 +6,7 @@ import asyncpg
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
+from src.config import settings
 from src.mcp_server.tools.file_read import file_read_tool
 from src.mcp_server.tools.http_api_call import http_api_call_tool
 from src.mcp_server.tools.postgres_query import postgres_query_tool
@@ -20,11 +21,11 @@ _db_pool: asyncpg.Pool | None = None
 async def lifespan(server: FastMCP):
     global _db_pool
     _db_pool = await asyncpg.create_pool(
-        host=os.getenv("POSTGRES_HOST", "localhost"),
-        port=int(os.getenv("POSTGRES_PORT", "5432")),
-        database=os.getenv("POSTGRES_DB", "harness_db"),
-        user=os.getenv("POSTGRES_USER", "harness"),
-        password=os.getenv("POSTGRES_PASSWORD", "harness_secret"),
+        host=settings.postgres_host,
+        port=settings.postgres_port,
+        database=settings.postgres_db,
+        user=settings.postgres_user,
+        password=settings.postgres_password,
         min_size=2,
         max_size=10,
     )
@@ -81,5 +82,5 @@ if __name__ == "__main__":
     mcp.run(
         transport="streamable-http",
         host="0.0.0.0",
-        port=int(os.getenv("MCP_SERVER_PORT", "8001")),
+        port=settings.mcp_server_port,
     )
