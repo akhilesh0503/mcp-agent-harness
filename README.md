@@ -43,7 +43,7 @@ User Request
 ## Build Phases
 
 - [x] **Phase 1** — Infrastructure (docker-compose, .env, init.sql, Prometheus, Grafana, policy.yaml)
-- [ ] **Phase 2** — MCP Server + 3 tools
+- [x] **Phase 2** — MCP Server + 3 tools
 - [ ] **Phase 3** — Config + Pydantic models
 - [ ] **Phase 4** — Harness layers (SecurityGuard → AuditLogger)
 - [ ] **Phase 5** — LLM abstraction + Ollama client
