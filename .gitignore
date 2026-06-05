@@ -9,3 +9,6 @@ venv/
 dist/
 build/
 .mypy_cache/
+*_err.txt
+*_out.txt
+chinook_harness.sql

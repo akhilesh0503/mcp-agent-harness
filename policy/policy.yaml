@@ -3,16 +3,25 @@ tools:
     risk_level: read_only
     allowed: true
     description: "Execute read-only SQL queries against PostgreSQL"
+    restricted_tables:
+      - audit_log
+      - audit_dlq
+      - hitl_approvals
+      - employee
 
   http_api_call:
     risk_level: network
     allowed: true
     description: "Make HTTP GET/POST requests to external APIs"
+    blocked_domains:
+      - internal
+      - localhost
+      - 169.254.0.0/16
 
   file_read:
-    risk_level: read_only
+    risk_level: sensitive
     allowed: true
-    description: "Read file contents from the allowed base directory"
+    description: "Read file contents — requires audit, no caching"
 
 risk_levels:
   read_only:
@@ -25,6 +34,12 @@ risk_levels:
     requires_approval: false
     audit: true
     cache_results: false
+
+  sensitive:
+    requires_approval: false
+    audit: true
+    cache_results: false
+    rate_limit_per_minute: 10
 
   destructive:
     requires_approval: true
