@@ -9,6 +9,11 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 from src.config import settings
+from src.harness.metrics import (
+    CIRCUIT_BREAKER_OPEN,
+    EXECUTOR_CALLS,
+    EXECUTOR_LATENCY,
+)
 from src.harness.models import PipelineContext, ResultStatus, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -60,6 +65,7 @@ class Executor:
             ctx.cache_hit = True
             ctx.result = cached
             ctx.result_status = ResultStatus.SUCCESS
+            EXECUTOR_CALLS.labels(tool=tool, result="cache_hit").inc()
             logger.debug("Cache HIT for tool '%s'", tool)
             return True
 
@@ -68,31 +74,36 @@ class Executor:
         async with breaker.lock:
             allowed, rejection_msg = self._breaker_check(breaker, tool)
         if not allowed:
+            EXECUTOR_CALLS.labels(tool=tool, result="circuit_open").inc()
             return self._fail(ctx, ResultStatus.CIRCUIT_OPEN, rejection_msg)
 
-        # 3. MCP call
+        # 3. MCP call (timed)
         try:
-            content = await asyncio.wait_for(
-                self._mcp_call(tool, ctx.tool_call.arguments),
-                timeout=60.0,
-            )
+            with EXECUTOR_LATENCY.labels(tool=tool).time():
+                content = await asyncio.wait_for(
+                    self._mcp_call(tool, ctx.tool_call.arguments),
+                    timeout=60.0,
+                )
         except asyncio.TimeoutError:
             async with breaker.lock:
                 self._breaker_record_failure(breaker, tool)
+            EXECUTOR_CALLS.labels(tool=tool, result="timeout").inc()
             return self._fail(ctx, ResultStatus.TIMEOUT, f"Tool '{tool}' timed out after 60s")
         except Exception as exc:
             logger.error("Executor MCP call failed — tool='%s' error='%s'", tool, exc)
             async with breaker.lock:
                 self._breaker_record_failure(breaker, tool)
+            EXECUTOR_CALLS.labels(tool=tool, result="error").inc()
             return self._fail(ctx, ResultStatus.ERROR, str(exc))
 
-        # 4. Record success
+        # 4. Record success + update circuit breaker gauge
         async with breaker.lock:
             self._breaker_record_success(breaker, tool)
 
         # 5. Cache write
         await self._cache_set(ctx, content)
 
+        EXECUTOR_CALLS.labels(tool=tool, result="success").inc()
         ctx.result = ToolResult(
             tool_call_id=ctx.tool_call.tool_call_id,
             content=content,
@@ -143,6 +154,7 @@ class Executor:
             logger.info("Circuit breaker '%s': HALF_OPEN → CLOSED (probe succeeded)", tool)
         breaker.failures = 0
         breaker.state = "closed"
+        CIRCUIT_BREAKER_OPEN.labels(tool=tool).set(0)
 
     def _breaker_record_failure(self, breaker: _Breaker, tool: str) -> None:
         threshold = settings.circuit_breaker_failure_threshold
@@ -151,6 +163,7 @@ class Executor:
             logger.warning("Circuit breaker '%s': HALF_OPEN → OPEN (probe failed)", tool)
             breaker.state = "open"
             breaker.opened_at = time.monotonic()
+            CIRCUIT_BREAKER_OPEN.labels(tool=tool).set(1)
             return
 
         breaker.failures += 1
@@ -161,6 +174,7 @@ class Executor:
             )
             breaker.state = "open"
             breaker.opened_at = time.monotonic()
+            CIRCUIT_BREAKER_OPEN.labels(tool=tool).set(1)
 
     # ── MCP call ──────────────────────────────────────────────────────────────
 

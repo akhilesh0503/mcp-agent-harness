@@ -9,6 +9,7 @@ import httpx
 import yaml
 
 from src.config import settings
+from src.harness.metrics import PERMISSION_CHECKS
 from src.harness.models import PipelineContext, RiskLevel, ResultStatus, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -60,9 +61,12 @@ class PermissionResolver:
                     content="This operation requires human approval. Request timed out or was rejected.",
                     is_error=True,
                 )
+                PERMISSION_CHECKS.labels(tool=ctx.tool_call.tool_name, result="hitl_timeout").inc()
                 return False
+            PERMISSION_CHECKS.labels(tool=ctx.tool_call.tool_name, result="hitl_approved").inc()
 
         ctx.permission_granted = True
+        PERMISSION_CHECKS.labels(tool=ctx.tool_call.tool_name, result="allowed").inc()
         return True
 
     # ── HITL ──────────────────────────────────────────────────────────────────
@@ -138,6 +142,7 @@ class PermissionResolver:
             content=reason,
             is_error=True,
         )
+        PERMISSION_CHECKS.labels(tool=ctx.tool_call.tool_name, result="rejected").inc()
         return False
 
     @staticmethod

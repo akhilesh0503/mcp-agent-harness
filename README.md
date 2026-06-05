@@ -52,7 +52,7 @@ User Request
 - [x] **Phase 5** — LLM abstraction + Ollama client (+ Claude client)
 - [x] **Phase 6a** — Pipeline orchestrator
 - [x] **Phase 6b** — FastAPI entry point + agentic loop
-- [ ] **Phase 7** — Prometheus metrics on all layers
+- [x] **Phase 7** — Prometheus metrics on all layers
 - [ ] **Phase 8** — Grafana dashboard
 - [ ] **Phase 9** — Tests (PermissionResolver + BudgetTracker)
 
@@ -97,6 +97,7 @@ uvicorn src.harness.main:app --reload
 | `DELETE` | `/session/{session_id}` | Clear conversation history for a session |
 | `POST` | `/hitl/{trace_id}/decide` | Approve or reject a pending destructive tool call |
 | `GET` | `/audit/dlq-depth` | Number of records waiting in the audit dead-letter queue |
+| `GET` | `/metrics` | Prometheus metrics scrape endpoint |
 
 ## Layer Summary
 

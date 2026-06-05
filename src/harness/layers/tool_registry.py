@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from src.harness.metrics import REGISTRY_CHECKS
 from src.harness.models import PipelineContext, ResultStatus, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ class ToolRegistry:
         tool_name = ctx.tool_call.tool_name
 
         if tool_name not in self._schemas:
+            REGISTRY_CHECKS.labels(tool=tool_name, result="unknown_tool").inc()
             return self._reject(
                 ctx,
                 f"Tool '{tool_name}' is not registered. "
@@ -65,8 +67,10 @@ class ToolRegistry:
 
         error = self._validate(self._schemas[tool_name], ctx.tool_call.arguments)
         if error:
+            REGISTRY_CHECKS.labels(tool=tool_name, result="schema_error").inc()
             return self._reject(ctx, f"Invalid arguments for '{tool_name}': {error}")
 
+        REGISTRY_CHECKS.labels(tool=tool_name, result="valid").inc()
         return True
 
     # ── Validation ────────────────────────────────────────────────────────────

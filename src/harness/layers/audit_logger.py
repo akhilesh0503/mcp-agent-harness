@@ -5,6 +5,7 @@ import json
 import logging
 import uuid
 
+from src.harness.metrics import AUDIT_DLQ_DEPTH, AUDIT_WRITES
 from src.harness.models import PipelineContext
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ class AuditLogger:
         row = _build_row(ctx)
         try:
             await self._write(row)
+            AUDIT_WRITES.labels(result="success").inc()
             logger.debug(
                 "AuditLogger: wrote trace=%s tool=%s status=%s",
                 row["trace_id"], row["tool_name"], row["result_status"],
@@ -48,6 +50,7 @@ class AuditLogger:
                 "AuditLogger: DB write failed (trace=%s) — pushing to DLQ: %s",
                 row["trace_id"], exc,
             )
+            AUDIT_WRITES.labels(result="dlq").inc()
             await self._dlq_push(row)
 
     async def start_drainer(self) -> None:
@@ -104,6 +107,8 @@ class AuditLogger:
                 drained = await self._drain_once()
                 if drained:
                     logger.info("AuditLogger DLQ: replayed %d record(s) to PostgreSQL", drained)
+                depth = await self.dlq_depth()
+                AUDIT_DLQ_DEPTH.set(depth)
             except Exception as exc:
                 logger.error("AuditLogger DLQ drain sweep failed: %s", exc)
 

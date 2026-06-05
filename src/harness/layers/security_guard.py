@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from src.harness.metrics import SECURITY_BLOCKS, SECURITY_CHECKS
 from src.harness.models import PipelineContext, ResultStatus, ToolResult
 
 # ── Compiled threat patterns ──────────────────────────────────────────────────
@@ -65,42 +66,47 @@ class SecurityGuard:
 
     async def check(self, ctx: PipelineContext) -> bool:
         """Return True if safe. On threat: populate ctx and return False."""
-        threat = self._scan(ctx.tool_call.tool_name, ctx.tool_call.arguments)
+        tool = ctx.tool_call.tool_name
+        threat, category = self._scan(ctx.tool_call.tool_name, ctx.tool_call.arguments)
         if threat:
+            SECURITY_CHECKS.labels(tool=tool, result="blocked").inc()
+            SECURITY_BLOCKS.labels(category=category).inc()
             self._block(ctx, threat)
             return False
+        SECURITY_CHECKS.labels(tool=tool, result="allowed").inc()
         return True
 
     # ── Private ───────────────────────────────────────────────────────────────
 
-    def _scan(self, tool: str, args: dict) -> str | None:
+    def _scan(self, tool: str, args: dict) -> tuple[str, str] | tuple[None, None]:
+        """Return (threat_description, category) or (None, None) if clean."""
         for key, value in args.items():
             if not isinstance(value, str):
                 continue
 
             for pattern in _PROMPT_INJECTION:
                 if pattern.search(value):
-                    return f"Prompt injection detected in argument '{key}'"
+                    return f"Prompt injection detected in argument '{key}'", "prompt_injection"
 
             if tool == "file_read" and key == "path":
                 if _PATH_TRAVERSAL.search(value):
-                    return f"Path traversal attempt in '{key}': {value!r}"
+                    return f"Path traversal attempt in '{key}': {value!r}", "path_traversal"
                 if _ABSOLUTE_PATH.match(value):
-                    return f"Absolute path not allowed in '{key}': {value!r}"
+                    return f"Absolute path not allowed in '{key}': {value!r}", "path_traversal"
 
             if tool == "http_api_call" and key == "url":
                 if _BAD_SCHEME.match(value):
-                    return f"Non-HTTP scheme blocked in '{key}': {value!r}"
+                    return f"Non-HTTP scheme blocked in '{key}': {value!r}", "ssrf"
                 if _PRIVATE_IP.search(value):
-                    return f"SSRF: private/loopback address in '{key}': {value!r}"
+                    return f"SSRF: private/loopback address in '{key}': {value!r}", "ssrf"
                 if _METADATA_ENDPOINT.search(value):
-                    return f"SSRF: cloud metadata endpoint blocked in '{key}': {value!r}"
+                    return f"SSRF: cloud metadata endpoint blocked in '{key}': {value!r}", "ssrf"
 
             if tool == "postgres_query" and key == "query":
                 if _SQL_TIMING.search(value):
-                    return f"SQL timing attack pattern detected in '{key}'"
+                    return f"SQL timing attack pattern detected in '{key}'", "sql_timing"
 
-        return None
+        return None, None
 
     def _block(self, ctx: PipelineContext, threat: str) -> None:
         ctx.result_status = ResultStatus.SECURITY_BLOCKED

@@ -23,6 +23,7 @@ from src.harness.models import (
     ToolCall,
     ToolResult,
 )
+from src.harness.metrics import PIPELINE_CALLS, PIPELINE_LATENCY
 from src.llm.base import LLMClient, LLMResponse
 from src.llm.ollama_client import OllamaClient
 
@@ -186,6 +187,13 @@ class Pipeline:
 
         finally:
             ctx.latency_ms = int((time.monotonic() - started) * 1000)
+            PIPELINE_CALLS.labels(
+                tool=tool_call.tool_name,
+                result_status=ctx.result_status.value,
+            ).inc()
+            PIPELINE_LATENCY.labels(tool=tool_call.tool_name).observe(
+                (time.monotonic() - started)
+            )
             # Layer 6 — AuditLogger (always, even on exception)
             await self.audit_logger.record(ctx)
 

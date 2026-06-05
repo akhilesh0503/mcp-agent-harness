@@ -7,9 +7,11 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from src.config import settings
+from src.harness.metrics import CHAT_REQUESTS, LLM_TOKENS, LLM_TURNS
 from src.harness.models import (
     ChatRequest,
     ChatResponse,
@@ -107,6 +109,8 @@ async def _agentic_loop(
 
         # ── Final answer ──────────────────────────────────────────────────────
         if llm_response.is_final:
+            LLM_TURNS.labels(result="final_answer").inc()
+            LLM_TOKENS.inc(llm_response.token_count)
             messages.append(
                 ConversationMessage(role="assistant", content=llm_response.text)
             )
@@ -123,6 +127,8 @@ async def _agentic_loop(
             )
 
         # ── Tool calls requested ──────────────────────────────────────────────
+        LLM_TURNS.labels(result="tool_calls").inc()
+        LLM_TOKENS.inc(llm_response.token_count)
         # Store the assistant's tool-call turn in OpenAI wire format
         raw_tcs = [
             {
@@ -198,11 +204,15 @@ async def chat(body: ChatRequest, req: Request) -> ChatResponse:
     session_id = body.session_id or str(uuid.uuid4())
 
     try:
-        return await _agentic_loop(
+        result = await _agentic_loop(
             pipeline, session_id, body.message, body.max_turns
         )
+        label = "max_turns" if result.tool_calls_made > 0 and not result.response.startswith("Reached") else "success"
+        CHAT_REQUESTS.labels(result=label).inc()
+        return result
     except Exception as exc:
         logger.exception("Unhandled error in /chat session=%s", session_id)
+        CHAT_REQUESTS.labels(result="error").inc()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -276,3 +286,9 @@ async def dlq_depth(req: Request):
     pipeline = _pipeline(req)
     depth    = await pipeline.audit_logger.dlq_depth()
     return {"dlq_depth": depth}
+
+
+@app.get("/metrics", tags=["System"], include_in_schema=False)
+async def metrics():
+    """Prometheus metrics endpoint — scraped by Prometheus on this same port."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from src.config import settings as _settings
+from src.harness.metrics import BUDGET_CHECKS
 from src.harness.models import BudgetStatus, PipelineContext, ResultStatus, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class BudgetTracker:
             tokens = await self._get(ctx.session_id, "tokens")
         except Exception as exc:
             logger.error("BudgetTracker Redis error during check: %s", exc)
+            BUDGET_CHECKS.labels(result="redis_error").inc()
             return self._reject(
                 ctx,
                 "Budget check failed — Redis unavailable. Rejecting to prevent untracked spend.",
@@ -42,6 +44,7 @@ class BudgetTracker:
             )
 
         if calls >= _settings.session_budget_calls:
+            BUDGET_CHECKS.labels(result="calls_exceeded").inc()
             return self._reject(
                 ctx,
                 f"Session call limit reached ({calls}/{_settings.session_budget_calls}). "
@@ -49,12 +52,14 @@ class BudgetTracker:
             )
 
         if tokens >= _settings.session_budget_tokens:
+            BUDGET_CHECKS.labels(result="tokens_exceeded").inc()
             return self._reject(
                 ctx,
                 f"Session token limit reached ({tokens}/{_settings.session_budget_tokens}). "
                 "Start a new session to continue.",
             )
 
+        BUDGET_CHECKS.labels(result="allowed").inc()
         return True
 
     # ── Mutation helpers (called by pipeline, not part of the check chain) ────
