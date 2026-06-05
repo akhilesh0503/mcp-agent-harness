@@ -35,7 +35,12 @@ async def lifespan(server: FastMCP):
     _db_pool = None
 
 
-mcp = FastMCP("agent-harness-tools", lifespan=lifespan)
+mcp = FastMCP(
+    "agent-harness-tools",
+    lifespan=lifespan,
+    host="0.0.0.0",
+    port=settings.mcp_server_port,
+)
 
 
 # ── Tool registrations ────────────────────────────────────────────────────────
@@ -79,8 +84,4 @@ async def file_read(path: str) -> str:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    mcp.run(
-        transport="streamable-http",
-        host="0.0.0.0",
-        port=settings.mcp_server_port,
-    )
+    mcp.run(transport="streamable-http")
