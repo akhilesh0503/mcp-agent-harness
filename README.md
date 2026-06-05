@@ -1,5 +1,7 @@
 # MCP Agent Harness
 
+**29/30 scenarios passing · 2 security attacks blocked · ~2s p50 / ~5s p95 tool latency · 0 audit log failures across 30 runs**
+
 A production-grade MCP server + agent harness built in Python. An LLM (Ollama/Claude) never calls tools directly — every tool call flows through a 6-layer validation and execution pipeline.
 
 ## Architecture
