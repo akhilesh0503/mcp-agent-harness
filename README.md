@@ -53,7 +53,7 @@ User Request
 - [x] **Phase 6a** — Pipeline orchestrator
 - [x] **Phase 6b** — FastAPI entry point + agentic loop
 - [x] **Phase 7** — Prometheus metrics on all layers
-- [ ] **Phase 8** — Grafana dashboard
+- [x] **Phase 8** — Grafana dashboard (17 panels, auto-provisioned)
 - [ ] **Phase 9** — Tests (PermissionResolver + BudgetTracker)
 
 ## Running Locally

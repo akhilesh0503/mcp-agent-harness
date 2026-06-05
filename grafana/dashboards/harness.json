@@ -1,0 +1,249 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "tags": ["mcp", "harness", "ai-agent"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Data Source",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "MCP Agent Harness",
+  "uid": "mcp-agent-harness",
+  "version": 1,
+  "panels": [
+
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total Pipeline Calls",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "sum(harness_pipeline_calls_total)", "legendFormat": "calls", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } }
+    },
+
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "LLM Tokens Consumed",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "harness_llm_tokens_total", "legendFormat": "tokens", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] } } }
+    },
+
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Security Blocks",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "sum(harness_security_blocks_total)", "legendFormat": "blocks", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 10 }] } } }
+    },
+
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Audit DLQ Depth",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "harness_audit_dlq_depth", "legendFormat": "queued", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } }
+    },
+
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Pipeline Call Rate by Status",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "rate(harness_pipeline_calls_total{result_status='success'}[1m])", "legendFormat": "success", "refId": "A" },
+        { "expr": "rate(harness_pipeline_calls_total{result_status='security_blocked'}[1m])", "legendFormat": "security_blocked", "refId": "B" },
+        { "expr": "rate(harness_pipeline_calls_total{result_status='rejected'}[1m])", "legendFormat": "rejected", "refId": "C" },
+        { "expr": "rate(harness_pipeline_calls_total{result_status='budget_exceeded'}[1m])", "legendFormat": "budget_exceeded", "refId": "D" },
+        { "expr": "rate(harness_pipeline_calls_total{result_status='circuit_open'}[1m])", "legendFormat": "circuit_open", "refId": "E" },
+        { "expr": "rate(harness_pipeline_calls_total{result_status='error'}[1m])", "legendFormat": "error", "refId": "F" }
+      ],
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 8 } } }
+    },
+
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Pipeline Latency — P50 / P95 / P99",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, rate(harness_pipeline_latency_seconds_bucket[5m]))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, rate(harness_pipeline_latency_seconds_bucket[5m]))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, rate(harness_pipeline_latency_seconds_bucket[5m]))", "legendFormat": "p99", "refId": "C" }
+      ],
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 8 } } }
+    },
+
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Executor Outcomes by Tool",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "rate(harness_executor_calls_total[1m])", "legendFormat": "{{tool}} — {{result}}", "refId": "A" }
+      ],
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 8 } } }
+    },
+
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "MCP Tool Call Latency — P50 / P95",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, rate(harness_executor_latency_seconds_bucket[5m])) by (tool)", "legendFormat": "{{tool}} p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, rate(harness_executor_latency_seconds_bucket[5m])) by (tool)", "legendFormat": "{{tool}} p95", "refId": "B" }
+      ],
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 8 } } }
+    },
+
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Security Blocks by Category",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "harness_security_blocks_total", "legendFormat": "{{category}}", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } }
+    },
+
+    {
+      "id": 10,
+      "type": "bargauge",
+      "title": "Circuit Breaker State by Tool (1 = OPEN)",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "harness_circuit_breaker_open", "legendFormat": "{{tool}}", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "basic" },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } }
+    },
+
+    {
+      "id": 11,
+      "type": "bargauge",
+      "title": "Budget Check Outcomes",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "harness_budget_checks_total", "legendFormat": "{{result}}", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } }
+    },
+
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "LLM Turns — Tool Calls vs Final Answers",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "rate(harness_llm_turns_total{result='tool_calls'}[1m])", "legendFormat": "tool call turns", "refId": "A" },
+        { "expr": "rate(harness_llm_turns_total{result='final_answer'}[1m])", "legendFormat": "final answers", "refId": "B" }
+      ],
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } } }
+    },
+
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Audit Write Outcomes",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "rate(harness_audit_writes_total{result='success'}[1m])", "legendFormat": "db success", "refId": "A" },
+        { "expr": "rate(harness_audit_writes_total{result='dlq'}[1m])", "legendFormat": "dlq fallback", "refId": "B" }
+      ],
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } } }
+    },
+
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Audit DLQ Depth Over Time",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 34 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "harness_audit_dlq_depth", "legendFormat": "records in DLQ", "refId": "A" }],
+      "options": { "tooltip": { "mode": "single" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 20 }, "color": { "fixedColor": "red", "mode": "fixed" } } }
+    },
+
+    {
+      "id": 15,
+      "type": "bargauge",
+      "title": "Permission Check Outcomes",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 34 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "harness_permission_checks_total", "legendFormat": "{{tool}} — {{result}}", "refId": "A" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "palette-classic" } } }
+    },
+
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Cache Hit Rate",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 40 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{
+        "expr": "sum(harness_executor_calls_total{result='cache_hit'}) / sum(harness_executor_calls_total) * 100",
+        "legendFormat": "hit %",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "percent", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 10 }, { "color": "green", "value": 30 }] } } }
+    },
+
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Chat Requests by Outcome",
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 40 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "rate(harness_chat_requests_total[1m])", "legendFormat": "{{result}}", "refId": "A" }
+      ],
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 8 } } }
+    }
+
+  ]
+}
