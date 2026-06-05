@@ -51,7 +51,7 @@ User Request
 - [x] **Phase 4d** — AuditLogger (PostgreSQL + DLQ)
 - [x] **Phase 5** — LLM abstraction + Ollama client (+ Claude client)
 - [x] **Phase 6a** — Pipeline orchestrator
-- [ ] **Phase 6b** — FastAPI entry point + agentic loop
+- [x] **Phase 6b** — FastAPI entry point + agentic loop
 - [ ] **Phase 7** — Prometheus metrics on all layers
 - [ ] **Phase 8** — Grafana dashboard
 - [ ] **Phase 9** — Tests (PermissionResolver + BudgetTracker)
@@ -85,6 +85,18 @@ uvicorn src.harness.main:app --reload
 **Grafana:** http://localhost:3000 (admin / admin)  
 **Prometheus:** http://localhost:9090  
 **Harness API:** http://localhost:8000/docs
+
+## API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/chat` | Send a message; agent reasons + calls tools and returns final answer |
+| `GET` | `/health` | Liveness check — shows registered tools + circuit breaker states |
+| `GET` | `/budget/{session_id}` | Token and call spend for a session |
+| `GET` | `/tools` | List tools registered from MCP server |
+| `DELETE` | `/session/{session_id}` | Clear conversation history for a session |
+| `POST` | `/hitl/{trace_id}/decide` | Approve or reject a pending destructive tool call |
+| `GET` | `/audit/dlq-depth` | Number of records waiting in the audit dead-letter queue |
 
 ## Layer Summary
 

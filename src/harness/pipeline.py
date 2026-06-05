@@ -133,9 +133,12 @@ class Pipeline:
 
     # ── Core execution ────────────────────────────────────────────────────────
 
-    async def run_tool_call(self, session_id: str, tool_call: ToolCall) -> ToolResult:
+    async def run_tool_call(
+        self, session_id: str, tool_call: ToolCall
+    ) -> tuple[ToolResult, str]:
         """
         Run one LLM-requested tool call through all six layers.
+        Returns (ToolResult, trace_id_str).
         AuditLogger always fires in the finally block — no call goes unlogged.
         """
         ctx     = PipelineContext(session_id=session_id, tool_call=tool_call)
@@ -144,26 +147,26 @@ class Pipeline:
         try:
             # Layer 1 — SecurityGuard (injection / traversal / SSRF)
             if not await self.security_guard.check(ctx):
-                return self._safe_result(ctx)
+                return self._safe_result(ctx), ctx.trace_id_str
 
             # Layer 2 — PermissionResolver (policy + HITL)
             if not await self.permission_resolver.check(ctx):
-                return self._safe_result(ctx)
+                return self._safe_result(ctx), ctx.trace_id_str
 
             # Layer 3 — ToolRegistry (exists + schema valid)
             if not await self.tool_registry.check(ctx):
-                return self._safe_result(ctx)
+                return self._safe_result(ctx), ctx.trace_id_str
 
             # Layer 4 — BudgetTracker (spend gate)
             if not await self.budget_tracker.check(ctx):
-                return self._safe_result(ctx)
+                return self._safe_result(ctx), ctx.trace_id_str
 
             # Budget approved — increment call counter before execution
             await self.budget_tracker.increment_calls(session_id)
 
             # Layer 5 — Executor (cache → circuit breaker → MCP call)
             await self.executor.check(ctx)
-            return self._safe_result(ctx)
+            return self._safe_result(ctx), ctx.trace_id_str
 
         except Exception as exc:
             logger.exception(
@@ -171,15 +174,15 @@ class Pipeline:
                 session_id, tool_call.tool_name,
             )
             if ctx.result is None:
-                ctx.result_status  = ResultStatus.ERROR
-                ctx.error_message  = str(exc)
+                ctx.result_status     = ResultStatus.ERROR
+                ctx.error_message     = str(exc)
                 ctx.rejected_at_layer = "Pipeline"
                 ctx.result = ToolResult(
                     tool_call_id=tool_call.tool_call_id,
                     content=f"Internal pipeline error: {exc}",
                     is_error=True,
                 )
-            return self._safe_result(ctx)
+            return self._safe_result(ctx), ctx.trace_id_str
 
         finally:
             ctx.latency_ms = int((time.monotonic() - started) * 1000)
