@@ -50,7 +50,7 @@ User Request
 - [x] **Phase 4c** — Executor (circuit breaker + cache + MCP client)
 - [x] **Phase 4d** — AuditLogger (PostgreSQL + DLQ)
 - [x] **Phase 5** — LLM abstraction + Ollama client (+ Claude client)
-- [ ] **Phase 6a** — Pipeline orchestrator
+- [x] **Phase 6a** — Pipeline orchestrator
 - [ ] **Phase 6b** — FastAPI entry point + agentic loop
 - [ ] **Phase 7** — Prometheus metrics on all layers
 - [ ] **Phase 8** — Grafana dashboard
