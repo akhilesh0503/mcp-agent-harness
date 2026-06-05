@@ -27,7 +27,7 @@
   "timezone": "browser",
   "title": "MCP Agent Harness",
   "uid": "mcp-agent-harness",
-  "version": 4,
+  "version": 5,
   "panels": [
 
     {
@@ -38,7 +38,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [{ "expr": "sum(increase(harness_pipeline_calls_total[$__range]))", "legendFormat": "calls", "refId": "A" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } }
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } }
     },
 
     {
@@ -49,7 +49,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [{ "expr": "increase(harness_llm_tokens_total[$__range])", "legendFormat": "tokens", "refId": "A" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] } } }
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] } } }
     },
 
     {
@@ -60,7 +60,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [{ "expr": "sum(increase(harness_security_blocks_total[$__range]))", "legendFormat": "blocks", "refId": "A" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 10 }] } } }
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 10 }] } } }
     },
 
     {
