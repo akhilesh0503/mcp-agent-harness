@@ -113,7 +113,9 @@ uvicorn src.harness.main:app --reload
 | `DELETE` | `/session/{session_id}` | Clear conversation history for a session |
 | `POST` | `/hitl/{trace_id}/decide` | Approve or reject a pending destructive tool call |
 | `GET` | `/audit/dlq-depth` | Number of records waiting in the audit dead-letter queue |
+| `POST` | `/chat/stream` | SSE streaming version of /chat — real-time pipeline events |
 | `GET` | `/metrics` | Prometheus metrics scrape endpoint |
+| `GET` | `/` | Single-page frontend UI |
 
 ## Layer Summary
 

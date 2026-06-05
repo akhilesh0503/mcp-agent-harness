@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP Agent Harness</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .animate-fade-in { animation: fadeIn 0.2s ease forwards; }
+    .spinner { animation: spin 0.8s linear infinite; display: inline-block; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .animate-pulse { animation: pulse 1.5s ease-in-out infinite; }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 h-screen flex flex-col overflow-hidden">
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="flex items-center gap-4 px-5 py-3 border-b border-gray-800 shrink-0">
+    <div class="flex items-center gap-2">
+      <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+      </svg>
+      <span class="font-semibold text-sm tracking-wide">MCP Agent Harness</span>
+    </div>
+    <div class="flex items-center gap-2 ml-auto text-xs">
+      <span id="model-badge" class="bg-indigo-900/60 text-indigo-300 border border-indigo-800 px-2.5 py-1 rounded-full">qwen2.5:3b</span>
+      <span id="session-badge" class="bg-gray-800 text-gray-400 border border-gray-700 px-2.5 py-1 rounded-full font-mono">no session</span>
+      <div id="status-dot" class="w-2 h-2 rounded-full bg-gray-600 ml-1" title="Idle"></div>
+    </div>
+  </header>
+
+  <!-- ── Main ───────────────────────────────────────────────────────────── -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- Chat panel -->
+    <div class="flex flex-col flex-[3] min-w-0">
+
+      <!-- Messages -->
+      <div id="chat" class="flex-1 overflow-y-auto p-5 space-y-4">
+        <div class="text-center py-12 text-gray-600 text-sm select-none">
+          <p class="text-2xl mb-2">🤖</p>
+          <p class="font-medium text-gray-500">Ask the agent anything.</p>
+          <p class="text-xs mt-1">It will think, call tools through the 6-layer pipeline, and respond.</p>
+        </div>
+      </div>
+
+      <!-- Budget bar -->
+      <div class="border-t border-gray-800 px-5 py-2.5 shrink-0">
+        <div class="flex items-center gap-3 text-xs text-gray-500">
+          <span class="w-8 shrink-0">Calls</span>
+          <div class="flex-1 bg-gray-800 rounded-full h-1">
+            <div id="calls-bar" class="bg-indigo-500 h-1 rounded-full transition-all duration-500" style="width:0%"></div>
+          </div>
+          <span id="calls-text" class="w-16 text-right shrink-0">0 / 100</span>
+          <span class="w-12 shrink-0 ml-1">Tokens</span>
+          <div class="flex-1 bg-gray-800 rounded-full h-1">
+            <div id="tokens-bar" class="bg-purple-500 h-1 rounded-full transition-all duration-500" style="width:0%"></div>
+          </div>
+          <span id="tokens-text" class="w-20 text-right shrink-0">0 / 50 000</span>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="border-t border-gray-800 p-4 flex gap-3 shrink-0">
+        <input id="input" type="text"
+          placeholder="Type your message and press Enter…"
+          class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm
+                 focus:outline-none focus:border-indigo-500 placeholder-gray-600 transition-colors"
+          onkeydown="if(event.key==='Enter')sendMessage()"
+        />
+        <button id="send-btn" onclick="sendMessage()"
+          class="bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500
+                 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shrink-0">
+          Send
+        </button>
+      </div>
+    </div>
+
+    <!-- Pipeline panel -->
+    <div class="flex flex-col flex-[2] border-l border-gray-800 bg-gray-900/30 min-w-0">
+      <div class="flex items-center justify-between border-b border-gray-800 px-4 py-3 shrink-0">
+        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pipeline Activity</span>
+        <button onclick="clearPipeline()"
+          class="text-xs text-gray-600 hover:text-gray-400 transition-colors">clear</button>
+      </div>
+      <div id="pipeline-log" class="flex-1 overflow-y-auto p-3 space-y-1.5 font-mono text-xs">
+        <div class="text-gray-600 p-2">Waiting for activity…</div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- ── Script ─────────────────────────────────────────────────────────── -->
+  <script>
+    let sessionId = null;
+    let busy = false;
+
+    const chat       = document.getElementById('chat');
+    const pipelineLog = document.getElementById('pipeline-log');
+    const input      = document.getElementById('input');
+    const sendBtn    = document.getElementById('send-btn');
+    const statusDot  = document.getElementById('status-dot');
+    const sessionBadge = document.getElementById('session-badge');
+    const callsBar   = document.getElementById('calls-bar');
+    const tokensBar  = document.getElementById('tokens-bar');
+    const callsText  = document.getElementById('calls-text');
+    const tokensText = document.getElementById('tokens-text');
+
+    // ── State helpers ──────────────────────────────────────────────────────
+
+    function setStatus(state) {
+      const colors = { idle: 'bg-gray-600', thinking: 'bg-yellow-400 animate-pulse', done: 'bg-green-500', error: 'bg-red-500' };
+      statusDot.className = `w-2 h-2 rounded-full ml-1 ${colors[state] || colors.idle}`;
+    }
+
+    function setUI(enabled) {
+      busy = !enabled;
+      sendBtn.disabled = !enabled;
+      input.disabled   = !enabled;
+    }
+
+    function updateBudget(calls, tokens, callLimit, tokenLimit) {
+      const cp = Math.min(100, (calls  / callLimit)  * 100);
+      const tp = Math.min(100, (tokens / tokenLimit) * 100);
+      callsBar.style.width  = cp + '%';
+      tokensBar.style.width = tp + '%';
+      callsText.textContent  = `${calls} / ${callLimit}`;
+      tokensText.textContent = `${tokens.toLocaleString()} / ${tokenLimit.toLocaleString()}`;
+    }
+
+    // ── Chat bubbles ───────────────────────────────────────────────────────
+
+    function appendUserBubble(text) {
+      const div = document.createElement('div');
+      div.className = 'flex justify-end animate-fade-in';
+      div.innerHTML = `
+        <div class="max-w-[75%] bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed">
+          ${escHtml(text)}
+        </div>`;
+      chat.appendChild(div);
+      scrollChat();
+    }
+
+    function addThinkingBubble() {
+      const div = document.createElement('div');
+      div.id = 'thinking-bubble';
+      div.className = 'flex items-end gap-2 animate-fade-in';
+      div.innerHTML = `
+        <div class="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center text-xs shrink-0">🤖</div>
+        <div class="bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1.5 items-center">
+          <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse" style="animation-delay:0s"></span>
+          <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse" style="animation-delay:.15s"></span>
+          <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-pulse" style="animation-delay:.3s"></span>
+        </div>`;
+      chat.appendChild(div);
+      scrollChat();
+    }
+
+    function replaceThinkingWithResponse(text) {
+      const bubble = document.getElementById('thinking-bubble');
+      if (bubble) bubble.remove();
+
+      const div = document.createElement('div');
+      div.className = 'flex items-end gap-2 animate-fade-in';
+      div.innerHTML = `
+        <div class="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center text-xs shrink-0">🤖</div>
+        <div class="max-w-[75%] bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
+          ${escHtml(text)}
+        </div>`;
+      chat.appendChild(div);
+      scrollChat();
+    }
+
+    function appendErrorBubble(msg) {
+      const bubble = document.getElementById('thinking-bubble');
+      if (bubble) bubble.remove();
+      const div = document.createElement('div');
+      div.className = 'flex items-end gap-2 animate-fade-in';
+      div.innerHTML = `
+        <div class="w-7 h-7 rounded-full bg-red-900 flex items-center justify-center text-xs shrink-0">⚠</div>
+        <div class="bg-red-950 border border-red-800 text-red-300 rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm">
+          ${escHtml(msg)}
+        </div>`;
+      chat.appendChild(div);
+      scrollChat();
+    }
+
+    function scrollChat() { chat.scrollTop = chat.scrollHeight; }
+
+    // ── Pipeline log entries ───────────────────────────────────────────────
+
+    function clearPipeline() {
+      pipelineLog.innerHTML = '<div class="text-gray-600 p-2">Cleared.</div>';
+    }
+
+    function pipelineEntry(html) {
+      // Clear placeholder
+      const placeholder = pipelineLog.querySelector('.text-gray-600');
+      if (placeholder) placeholder.remove();
+
+      const el = document.createElement('div');
+      el.className = 'animate-fade-in';
+      el.innerHTML = html;
+      pipelineLog.appendChild(el);
+      pipelineLog.scrollTop = pipelineLog.scrollHeight;
+      return el;
+    }
+
+    function pipelineRow(icon, color, label, sub = '') {
+      return `<div class="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-800/50">
+        <span class="mt-0.5 shrink-0 ${color}">${icon}</span>
+        <div class="min-w-0">
+          <div class="text-gray-300">${label}</div>
+          ${sub ? `<div class="text-gray-500 truncate mt-0.5">${sub}</div>` : ''}
+        </div>
+      </div>`;
+    }
+
+    const pendingToolEls = {};   // call_id → DOM element
+
+    function logThinking(turn) {
+      pipelineEntry(pipelineRow('⟳', 'text-yellow-400 spinner', `LLM turn ${turn}`, 'Waiting for model…'));
+    }
+
+    function logToolStart(tool, args, callId) {
+      const argsStr = JSON.stringify(args).slice(0, 80) + (JSON.stringify(args).length > 80 ? '…' : '');
+      const el = pipelineEntry(pipelineRow('⟳', 'text-blue-400 spinner', tool, argsStr));
+      pendingToolEls[callId] = el;
+    }
+
+    function logToolEnd(tool, callId, traceId, isError, preview) {
+      const el = pendingToolEls[callId];
+      if (!el) return;
+      delete pendingToolEls[callId];
+
+      const short = traceId ? traceId.slice(0, 8) : '';
+      const previewStr = preview ? preview.slice(0, 80) + (preview.length > 80 ? '…' : '') : '';
+
+      if (isError) {
+        el.innerHTML = pipelineRow('✗', 'text-red-400', `${tool} <span class="text-red-700 ml-1">[blocked]</span>`, previewStr || 'Error — see audit log');
+      } else {
+        el.innerHTML = pipelineRow('✓', 'text-green-400', `${tool} <span class="text-gray-600 ml-1">#${short}</span>`, previewStr);
+      }
+    }
+
+    function logDone(toolCallsMade, tokens) {
+      pipelineEntry(pipelineRow('●', 'text-indigo-400',
+        `Done — ${toolCallsMade} tool call${toolCallsMade !== 1 ? 's' : ''}, ${tokens} tokens`));
+    }
+
+    function logError(msg) {
+      pipelineEntry(pipelineRow('⚠', 'text-red-400', 'Error', escHtml(msg)));
+    }
+
+    // ── SSE stream ─────────────────────────────────────────────────────────
+
+    async function streamChat(message) {
+      const response = await fetch('/chat/stream', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ message, session_id: sessionId, max_turns: 10 }),
+      });
+
+      if (!response.ok) throw new Error(`Server error ${response.status}`);
+
+      const reader  = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();   // hold incomplete line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            handleEvent(evt);
+          } catch { /* ignore parse errors */ }
+        }
+      }
+    }
+
+    function handleEvent(evt) {
+      switch (evt.type) {
+        case 'session':
+          sessionId = evt.session_id;
+          sessionBadge.textContent = evt.session_id.slice(0, 8) + '…';
+          break;
+
+        case 'thinking':
+          logThinking(evt.turn);
+          break;
+
+        case 'tool_start':
+          logToolStart(evt.tool, evt.args, evt.call_id);
+          break;
+
+        case 'tool_end':
+          logToolEnd(evt.tool, evt.call_id, evt.trace_id, evt.is_error, evt.preview);
+          break;
+
+        case 'done':
+          replaceThinkingWithResponse(evt.response);
+          logDone(evt.tool_calls_made, evt.total_tokens);
+          if (evt.call_limit) updateBudget(evt.call_count, evt.token_count, evt.call_limit, evt.token_limit);
+          setStatus('done');
+          setUI(true);
+          break;
+
+        case 'error':
+          appendErrorBubble(evt.message);
+          logError(evt.message);
+          setStatus('error');
+          setUI(true);
+          break;
+      }
+    }
+
+    // ── Send message ───────────────────────────────────────────────────────
+
+    async function sendMessage() {
+      const text = input.value.trim();
+      if (!text || busy) return;
+
+      input.value = '';
+      setUI(false);
+      setStatus('thinking');
+      appendUserBubble(text);
+      addThinkingBubble();
+
+      try {
+        await streamChat(text);
+      } catch (err) {
+        appendErrorBubble('Connection error: ' + err.message);
+        logError(err.message);
+        setStatus('error');
+        setUI(true);
+      }
+    }
+
+    // ── Utils ──────────────────────────────────────────────────────────────
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Focus input on load
+    window.addEventListener('load', () => input.focus());
+  </script>
+</body>
+</html>

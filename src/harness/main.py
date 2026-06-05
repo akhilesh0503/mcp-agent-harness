@@ -7,7 +7,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from src.config import settings
@@ -292,3 +292,144 @@ async def dlq_depth(req: Request):
 async def metrics():
     """Prometheus metrics endpoint — scraped by Prometheus on this same port."""
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# ── Streaming agentic loop ────────────────────────────────────────────────────
+
+async def _stream_agentic_loop(pipeline, session_id: str, user_message: str, max_turns: int):
+    """
+    Async generator that runs the agentic loop and yields SSE events
+    at each meaningful moment: LLM thinking, tool start, tool end, final answer.
+    The frontend listens to these to update the UI in real time.
+    """
+    def evt(type_: str, **kwargs) -> str:
+        return f"data: {json.dumps({'type': type_, **kwargs})}\n\n"
+
+    yield evt("session", session_id=session_id)
+
+    messages = await _load_history(pipeline, session_id)
+    messages.append(ConversationMessage(role="user", content=user_message))
+    tool_defs       = pipeline.get_tool_definitions()
+    total_tokens    = 0
+    tool_calls_made = 0
+    trace_ids: list[str] = []
+
+    try:
+        for turn in range(max_turns):
+            yield evt("thinking", turn=turn + 1)
+
+            llm_response = await pipeline.chat(messages, tool_defs)
+            total_tokens += llm_response.token_count
+
+            # ── Final answer ──────────────────────────────────────────────────
+            if llm_response.is_final:
+                messages.append(ConversationMessage(role="assistant", content=llm_response.text))
+                await _save_history(pipeline, session_id, messages)
+                await pipeline.budget_tracker.increment_tokens(session_id, llm_response.token_count)
+                budget = await pipeline.get_budget_status(session_id)
+                yield evt("done",
+                    response=llm_response.text or "",
+                    tool_calls_made=tool_calls_made,
+                    total_tokens=total_tokens,
+                    trace_ids=trace_ids,
+                    call_count=budget.call_count,
+                    token_count=budget.token_count,
+                    call_limit=budget.call_limit,
+                    token_limit=budget.token_limit,
+                )
+                return
+
+            # ── Tool calls requested ──────────────────────────────────────────
+            raw_tcs = [
+                {"id": tc.tool_call_id, "type": "function",
+                 "function": {"name": tc.tool_name, "arguments": json.dumps(tc.arguments)}}
+                for tc in llm_response.tool_calls
+            ]
+            messages.append(ConversationMessage(role="assistant", content=None, tool_calls=raw_tcs))
+
+            for tc in llm_response.tool_calls:
+                yield evt("tool_start",
+                    tool=tc.tool_name,
+                    args=tc.arguments,
+                    call_id=tc.tool_call_id,
+                )
+
+                tool_call = ToolCall(
+                    tool_call_id=tc.tool_call_id,
+                    tool_name=tc.tool_name,
+                    arguments=tc.arguments,
+                )
+                result, trace_id = await pipeline.run_tool_call(session_id, tool_call)
+                trace_ids.append(trace_id)
+                tool_calls_made += 1
+
+                yield evt("tool_end",
+                    tool=tc.tool_name,
+                    call_id=tc.tool_call_id,
+                    trace_id=trace_id,
+                    is_error=result.is_error,
+                    preview=result.content[:300] if result.content else "",
+                )
+
+                messages.append(ConversationMessage(
+                    role="tool",
+                    content=result.content,
+                    tool_call_id=tc.tool_call_id,
+                ))
+
+            await pipeline.budget_tracker.increment_tokens(session_id, llm_response.token_count)
+
+    except Exception as exc:
+        logger.exception("Error in streaming agentic loop session=%s", session_id)
+        yield evt("error", message=str(exc))
+        return
+
+    # Max turns exhausted
+    await _save_history(pipeline, session_id, messages)
+    yield evt("done",
+        response="Maximum reasoning turns reached without a final answer.",
+        tool_calls_made=tool_calls_made,
+        total_tokens=total_tokens,
+        trace_ids=trace_ids,
+        call_count=0,
+        token_count=total_tokens,
+        call_limit=settings.session_budget_calls,
+        token_limit=settings.session_budget_tokens,
+    )
+
+
+@app.post("/chat/stream", tags=["Agent"])
+async def chat_stream(body: ChatRequest, req: Request):
+    """
+    Streaming version of /chat using Server-Sent Events.
+    The frontend connects here and receives events in real time:
+    thinking → tool_start → tool_end → done (or error).
+    """
+    pipeline   = _pipeline(req)
+    session_id = body.session_id or str(uuid.uuid4())
+
+    async def generate():
+        async for chunk in _stream_agentic_loop(
+            pipeline, session_id, body.message, body.max_turns
+        ):
+            yield chunk
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":    "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection":       "keep-alive",
+        },
+    )
+
+
+@app.get("/", include_in_schema=False)
+async def frontend():
+    """Serve the single-page frontend at the root URL."""
+    try:
+        with open("src/static/index.html", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        return HTMLResponse("<h1>Frontend not found. Run from project root.</h1>", status_code=404)
