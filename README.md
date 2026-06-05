@@ -49,7 +49,7 @@ User Request
 - [x] **Phase 4b** — ToolRegistry + BudgetTracker
 - [x] **Phase 4c** — Executor (circuit breaker + cache + MCP client)
 - [x] **Phase 4d** — AuditLogger (PostgreSQL + DLQ)
-- [ ] **Phase 5** — LLM abstraction + Ollama client
+- [x] **Phase 5** — LLM abstraction + Ollama client (+ Claude client)
 - [ ] **Phase 6a** — Pipeline orchestrator
 - [ ] **Phase 6b** — FastAPI entry point + agentic loop
 - [ ] **Phase 7** — Prometheus metrics on all layers
@@ -58,19 +58,27 @@ User Request
 
 ## Running Locally
 
-**Prerequisites:** Docker Desktop, Ollama
+**Prerequisites:** Docker Desktop, Ollama, Python 3.11
 
 ```bash
-# Pull the model
+# 1. Create and activate virtual environment
+py -3.11 -m venv .venv
+.\.venv\Scripts\activate        # Windows
+# source .venv/bin/activate     # macOS/Linux
+
+# 2. Install dependencies
+pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
+
+# 3. Pull the local model
 ollama pull qwen2.5:3b
 
-# Start infrastructure
+# 4. Start infrastructure
 docker compose up postgres redis prometheus grafana -d
 
-# Run MCP server
+# 5. Run MCP server
 python -m src.mcp_server.server
 
-# Run harness
+# 6. Run harness
 uvicorn src.harness.main:app --reload
 ```
 
