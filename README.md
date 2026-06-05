@@ -54,7 +54,23 @@ User Request
 - [x] **Phase 6b** — FastAPI entry point + agentic loop
 - [x] **Phase 7** — Prometheus metrics on all layers
 - [x] **Phase 8** — Grafana dashboard (17 panels, auto-provisioned)
-- [ ] **Phase 9** — Tests (PermissionResolver + BudgetTracker)
+- [x] **Phase 9** — Tests (PermissionResolver + BudgetTracker + SecurityGuard)
+
+## Running Tests
+
+Tests use mocks — no Docker, Redis, PostgreSQL, or Ollama required.
+
+```bash
+# Activate venv first
+.\.venv\Scripts\activate
+
+pytest
+```
+
+| File | What it covers |
+|---|---|
+| `tests/test_permission_resolver.py` | Policy lookup, risk levels, HITL approve/reject/timeout, fail-closed |
+| `tests/test_budget_tracker.py` | Spend gates, Redis errors, increment helpers, BudgetStatus |
 
 ## Running Locally
 
