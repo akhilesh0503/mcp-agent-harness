@@ -56,7 +56,56 @@ User Request
 - [x] **Phase 8** — Grafana dashboard (17 panels, auto-provisioned)
 - [x] **Phase 9** — Tests (PermissionResolver + BudgetTracker + SecurityGuard)
 
-## Running Tests
+## Test Results
+
+### End-to-End Traffic Test (`tests/run_traffic.py`)
+
+30 scenarios fired against the live stack — Chinook music database queries, multi-tool calls, security attacks, cache validation, and budget tracking.
+
+**Run summary (2026-06-05, model: `qwen2.5:3b`):**
+
+| Metric | Result |
+|---|---|
+| Scenarios | 30 |
+| Passed | 29 / 30 |
+| Security blocks caught | 2 (path traversal, SSRF) |
+| Cache hits | 2 (identical album-count queries) |
+| Audit DLQ | 0 (all writes succeeded) |
+| Circuit breakers tripped | 0 |
+
+**Selected scenario results:**
+
+| # | Scenario | Result | Tokens | Response |
+|---|---|---|---|---|
+| 02 | Top 5 artists by album count | PASS | 1,426 | Iron Maiden (1st), ... |
+| 03 | Total revenue from invoices | PASS | 1,216 | **$2,328.60** |
+| 04 | Customers by country | PASS | 1,357 | USA (13), Canada, ... |
+| 11 | Multi-tool: DB + HTTP | PASS | 2,020 | 3,503 tracks + UUID |
+| 16 | BLOCK: path traversal | PASS | 1,254 | Blocked by SecurityGuard |
+| 17 | BLOCK: SSRF (169.254.x.x) | PASS | 1,478 | Blocked by SecurityGuard |
+| 23 | Cache test — first call | PASS | 1,187 | 347 albums |
+| 24 | Cache test — second call | PASS | 1,203 | 347 albums (cache hit) |
+| 28 | Avg track duration by genre | PASS | 1,769 | Sci Fi & Fantasy, ... |
+| 30 | Playlists count | PASS | 1,473 | 18 playlists |
+
+To reproduce:
+```bash
+python tests/run_traffic.py
+```
+
+### Grafana Dashboard
+
+17 panels, auto-provisioned. Set time range to **Last 15 minutes** after running the traffic test.
+
+![Top stats — Pipeline Calls, Tokens, Security Blocks, DLQ depth; Pipeline Call Rate and Latency](docs/screenshots/image1.png)
+
+![Executor Outcomes, MCP Tool Call Latency, Security Blocks by Category, Circuit Breakers, Budget](docs/screenshots/image2.png)
+
+![LLM Turns, Audit Write Outcomes, DLQ Depth Over Time, Permission Check Outcomes](docs/screenshots/image3.png)
+
+![Cache Hit Rate and Chat Requests by Outcome](docs/screenshots/image4.png)
+
+### Unit Tests
 
 Tests use mocks — no Docker, Redis, PostgreSQL, or Ollama required.
 
