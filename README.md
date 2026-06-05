@@ -48,9 +48,10 @@ User Request
 - [x] **Phase 4a** — SecurityGuard + PermissionResolver
 - [x] **Phase 4b** — ToolRegistry + BudgetTracker
 - [x] **Phase 4c** — Executor (circuit breaker + cache + MCP client)
-- [ ] **Phase 4d** — AuditLogger (PostgreSQL + DLQ)
+- [x] **Phase 4d** — AuditLogger (PostgreSQL + DLQ)
 - [ ] **Phase 5** — LLM abstraction + Ollama client
-- [ ] **Phase 6** — Pipeline orchestrator + FastAPI agentic loop
+- [ ] **Phase 6a** — Pipeline orchestrator
+- [ ] **Phase 6b** — FastAPI entry point + agentic loop
 - [ ] **Phase 7** — Prometheus metrics on all layers
 - [ ] **Phase 8** — Grafana dashboard
 - [ ] **Phase 9** — Tests (PermissionResolver + BudgetTracker)
@@ -77,11 +78,23 @@ uvicorn src.harness.main:app --reload
 **Prometheus:** http://localhost:9090  
 **Harness API:** http://localhost:8000/docs
 
+## Layer Summary
+
+| Layer | File | Responsibility |
+|---|---|---|
+| 1 SecurityGuard | `layers/security_guard.py` | Prompt injection, path traversal, SSRF, SQL timing — pure regex, zero I/O |
+| 2 PermissionResolver | `layers/permission_resolver.py` | policy.yaml risk level lookup; HITL pause + Redis poll for destructive tools |
+| 3 ToolRegistry | `layers/tool_registry.py` | Validates tool exists + full JSON Schema argument check |
+| 4 BudgetTracker | `layers/budget_tracker.py` | Redis atomic call/token counters per session; fail-closed on Redis down |
+| 5 Executor | `layers/executor.py` | Cache → per-tool circuit breaker → MCP call → cache write |
+| 6 AuditLogger | `layers/audit_logger.py` | asyncpg INSERT; DLQ fallback to Redis on DB failure; background drainer |
+
 ## Key Design Decisions
 
 - **Session** = UUID per conversation, auto-generated at request time
-- **BudgetTracker** fails closed (Redis down → reject, not allow)
-- **Circuit breaker** per tool: 3 failures → open for 30s
-- **AuditLogger** uses a dead-letter queue (Redis list) when PostgreSQL is unavailable — no records are lost
-- **HITL approval** pauses the agent loop for destructive-risk tools, 30s timeout
-- **LLM is swappable** — `OllamaClient` and `ClaudeClient` share a common `LLMClient` interface
+- **BudgetTracker** fails closed — Redis down → reject the call, never silently allow
+- **Circuit breaker** is per-tool with independent locks — one failing tool never blocks others
+- **AuditLogger DLQ** — failed PostgreSQL writes go to Redis list `audit:dlq`; background drainer replays every 30s with up to 3 retries before abandoning; loss is always logged at CRITICAL
+- **HITL approval** pauses the agent loop for destructive-risk tools; polls Redis every 1s up to configurable timeout; fail-closed on timeout
+- **Cache key = audit input_hash** — SHA-256(tool + args) is computed once and reused for both Redis cache lookup and the audit log row
+- **LLM is swappable** — `OllamaClient` and `ClaudeClient` share a common `LLMClient` interface (Phase 5)
